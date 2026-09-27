@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>お絵描き当てゲーム / Drawing Guessing Game</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        canvas {
+            touch-action: none;
+        }
+        @keyframes popIn {
+            0% { opacity: 0; transform: scale(0.95) translateY(10px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .pop-animate {
+            animation: popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+        /* ペンキがこぼれたようなポップなアクセント */
+        .paint-blob-1 {
+            position: absolute;
+            top: -20px;
+            right: -20px;
+            width: 80px;
+            height: 80px;
+            background: #fbcfe8;
+            border-radius: 50% 70% 60% 40% / 40% 60% 70% 50%;
+            filter: blur(15px);
+            opacity: 0.5;
+            z-index: 0;
+            pointer-events: none;
+        }
+        .paint-blob-2 {
+            position: absolute;
+            bottom: -20px;
+            left: -20px;
+            width: 90px;
+            height: 90px;
+            background: #bae6fd;
+            border-radius: 60% 40% 50% 50% / 50% 50% 40% 60%;
+            filter: blur(15px);
+            opacity: 0.5;
+            z-index: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100 text-slate-700 font-sans min-h-screen flex flex-col justify-between selection:bg-pink-300 selection:text-slate-900 relative overflow-x-hidden">
+
+    <div class="paint-blob-1"></div>
+    <div class="paint-blob-2"></div>
+
+    <header class="bg-white/85 backdrop-blur-md border-b border-pink-200/60 py-2.5 px-3 sticky top-0 z-25 shadow-sm">
+        <div class="max-w-4xl mx-auto flex justify-between items-center gap-2">
+            <div class="flex items-center space-x-1.5 min-w-0">
+                <span class="text-sm sm:text-lg">🎨</span>
+                <h1 id="header-title" class="text-[11px] sm:text-sm font-bold tracking-wider text-slate-800 truncate">お絵描き当てギャラリー</h1>
+            </div>
+            <div class="flex items-center space-x-1.5 shrink-0">
+                <div id="match-status" class="text-[10px] sm:text-xs tracking-tight px-2.5 py-1 bg-pink-100/80 rounded-full font-bold text-pink-600 border border-pink-200 shadow-inner whitespace-nowrap">
+                    Round 1 / 5 ｜ 0 - 0
+                </div>
+                <button onclick="toggleLanguage()" id="lang-btn" class="text-[10px] font-bold px-2 py-1 bg-purple-100 text-purple-600 border border-purple-200 rounded-full hover:bg-purple-200 transition whitespace-nowrap">
+                    🌐 EN/JP
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-4xl w-full mx-auto p-4 flex flex-col justify-center items-center relative z-10">
+
+        <!-- Initial Menu Screen -->
+        <div id="screen-menu" class="w-full max-w-md bg-white/90 backdrop-blur-md border border-pink-200 rounded-3xl p-6 sm:p-8 shadow-xl text-center space-y-6 pop-animate relative overflow-hidden">
+            <div class="space-y-3">
+                <span class="text-3xl inline-block animate-bounce">🖌️</span>
+                <h2 id="menu-title" class="text-xl sm:text-2xl font-bold tracking-wide text-slate-800">お絵描き当てゲーム</h2>
+                <p id="menu-desc" class="text-xs text-slate-500 font-medium leading-relaxed">全5ラウンド！交代でお題を描いて、回答者に当ててもらおう！</p>
+            </div>
+            <div class="space-y-3">
+                <button id="menu-start-btn" onclick="startMatch()" class="w-full py-3.5 px-6 bg-gradient-to-r from-pink-400 to-purple-400 hover:from-pink-500 hover:to-purple-500 text-white font-bold text-xs sm:text-sm tracking-wider rounded-2xl shadow-md transition transform active:scale-95">
+                    2人プレイをはじめる
+                </button>
+            </div>
+        </div>
+
+        <!-- Role Handover Screen -->
+        <div id="screen-handover" class="w-full max-w-md bg-white/90 backdrop-blur-md border border-pink-200 rounded-3xl p-6 sm:p-8 shadow-xl text-center space-y-6 hidden pop-animate">
+            <div class="space-y-2">
+                <span id="handover-icon" class="text-3xl inline-block">🔒</span>
+                <h2 id="handover-title" class="text-lg sm:text-xl font-bold tracking-wide text-slate-800">デバイスを渡してね</h2>
+                <p id="handover-desc" class="text-xs text-slate-500 font-medium leading-relaxed">次のプレイヤーに端末を渡し、準備ができたら進んでね。</p>
+            </div>
+            <div class="bg-pink-50/80 p-4 rounded-2xl border border-pink-100">
+                <p id="handover-current-turn-label" class="text-[10px] text-pink-400 font-bold tracking-widest mb-1">現在のターン</p>
+                <p id="handover-role-label" class="text-xs sm:text-sm font-bold text-purple-600">プレイヤー 1 (お絵描き役)</p>
+            </div>
+            <button id="handover-btn" onclick="confirmHandover()" class="w-full py-3.5 bg-gradient-to-r from-pink-400 to-purple-400 hover:from-pink-500 hover:to-purple-500 text-white font-bold text-xs tracking-wider rounded-2xl shadow transition">
+                準備完了・お題をえらぶ
+            </button>
+        </div>
+
+        <!-- Prompt Selection Screen -->
+        <div id="screen-prompt-select" class="w-full max-w-md bg-white/90 backdrop-blur-md border border-pink-200 rounded-3xl p-6 sm:p-8 shadow-xl text-center space-y-6 hidden pop-animate">
+            <div class="space-y-2">
+                <span class="text-3xl inline-block">✨</span>
+                <h2 id="prompt-select-title" class="text-lg sm:text-xl font-bold tracking-wide text-slate-800">お題をえらぼう</h2>
+                <p class="text-xs text-slate-500 font-medium"><span id="selector-player-name" class="font-bold text-purple-600">プレイヤー 1</span> <span id="prompt-select-sub">さん、好きな難易度をひとつ選んでね。</span></p>
+            </div>
+            <div id="prompt-options-container" class="space-y-3"></div>
+        </div>
+
+        <!-- Drawer Screen -->
+        <div id="screen-drawer" class="w-full max-w-2xl flex flex-col items-center space-y-3 hidden pop-animate">
+            <div class="w-full flex justify-between items-center bg-white/90 border border-pink-200 p-3 rounded-2xl shadow-sm">
+                <div class="flex items-center space-x-2">
+                    <span id="badge-drawing" class="px-2.5 py-0.5 bg-pink-100 text-pink-600 border border-pink-200 rounded-lg text-[10px] tracking-wider font-bold">お絵描き中</span>
+                    <span id="drawer-player-name" class="text-xs font-bold text-slate-700">プレイヤー 1</span>
+                </div>
+                <div class="bg-purple-50 px-3.5 py-1 rounded-xl border border-purple-100 text-center">
+                    <span id="secret-word-label" class="text-[9px] text-purple-400 font-bold tracking-wider block">ひみつのお題</span>
+                    <span id="secret-word-display" class="text-xs sm:text-sm font-bold text-purple-600 tracking-wider">りんご</span>
+                </div>
+            </div>
+
+            <div class="relative w-full aspect-[4/3] bg-white rounded-3xl overflow-hidden shadow-xl border-4 border-white ring-4 ring-pink-200">
+                <canvas id="paint-canvas" class="w-full h-full cursor-crosshair"></canvas>
+            </div>
+
+            <div class="w-full bg-white/90 border border-pink-200 p-3 rounded-2xl flex flex-wrap items-center justify-between gap-2.5 shadow-sm">
+                <div class="flex items-center space-x-2">
+                    <button onclick="setBrushColor('#1e293b')" class="w-6 h-6 rounded-full bg-slate-800 border-2 border-white shadow hover:scale-110 transition"></button>
+                    <button onclick="setBrushColor('#f43f5e')" class="w-6 h-6 rounded-full bg-rose-500 border-2 border-white shadow hover:scale-110 transition"></button>
+                    <button onclick="setBrushColor('#3b82f6')" class="w-6 h-6 rounded-full bg-blue-500 border-2 border-white shadow hover:scale-110 transition"></button>
+                    <button onclick="setBrushColor('#10b981')" class="w-6 h-6 rounded-full bg-emerald-500 border-2 border-white shadow hover:scale-110 transition"></button>
+                    <button onclick="setBrushColor('#f59e0b')" class="w-6 h-6 rounded-full bg-amber-500 border-2 border-white shadow hover:scale-110 transition"></button>
+                    <button id="btn-clear" onclick="clearCanvas()" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-xl text-[11px] font-bold text-slate-600 transition">全部消す</button>
+                </div>
+                <button id="btn-finish-drawing" onclick="finishDrawingTurn()" class="px-4 py-2 bg-gradient-to-r from-pink-400 to-purple-400 hover:from-pink-500 hover:to-purple-500 text-white font-bold rounded-xl text-xs tracking-wider shadow transition">
+                    できた！回答者へ ➔
+                </button>
+            </div>
+        </div>
+
+        <!-- Guesser Screen -->
+        <div id="screen-guesser" class="w-full max-w-2xl bg-white/90 backdrop-blur-md border border-pink-200 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4 hidden pop-animate">
+            <div class="flex justify-between items-center border-b border-pink-100 pb-2.5">
+                <div class="flex items-center space-x-2">
+                    <span id="badge-guessing" class="px-2.5 py-0.5 bg-purple-100 text-purple-600 border border-purple-200 rounded-lg text-[10px] tracking-wider font-bold whitespace-nowrap">回答タイム</span>
+                    <span id="guesser-player-name" class="text-xs font-bold text-slate-700 whitespace-nowrap">プレイヤー 2</span>
+                </div>
+                <span id="guesser-instruction" class="text-[11px] text-slate-400 font-medium">絵を見てお題を当てよう！</span>
+            </div>
+
+            <div class="relative w-full aspect-[4/3] bg-white rounded-2xl overflow-hidden border-4 border-white ring-4 ring-pink-200 shadow-inner flex items-center justify-center">
+                <img id="preview-image" class="w-full h-full object-contain" alt="描かれた絵" />
+            </div>
+
+            <div class="space-y-2.5">
+                <div class="flex gap-2">
+                    <input type="text" id="guess-input" placeholder="ここに入力してね (例: りんご)" class="flex-1 bg-pink-50/50 border border-pink-200 px-3.5 py-2.5 rounded-2xl text-xs tracking-wide text-slate-700 focus:outline-none focus:border-purple-400">
+                    <button id="btn-submit-guess" onclick="submitGuess()" class="px-5 py-2.5 bg-gradient-to-r from-pink-400 to-purple-400 hover:from-pink-500 hover:to-purple-500 text-white font-bold text-xs tracking-wider rounded-2xl shadow transition whitespace-nowrap">
+                        回答する
+                    </button>
+                </div>
+                <button id="btn-skip-guess" onclick="skipGuess()" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-500 font-medium rounded-2xl text-xs transition">
+                    わからないのでパスする (不正解)
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <footer class="w-full bg-white/80 border-t border-pink-200/60 py-2.5 px-4 mt-auto relative z-10">
+        <div class="max-w-xl mx-auto flex flex-col items-center">
+            <div id="banner-ad-container" class="w-full max-w-[468px] h-[50px] bg-white border border-pink-200 rounded-2xl flex items-center justify-between px-3 relative overflow-hidden shadow-sm">
+                <div class="absolute top-1 right-1 bg-pink-100 text-pink-500 text-[8px] px-1 rounded font-bold uppercase">PR</div>
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-7 h-7 bg-pink-50 rounded-xl flex items-center justify-center text-pink-500 text-xs">💡</div>
+                    <div class="text-left">
+                        <p id="ad-title" class="text-[10px] font-bold text-slate-700">楽しいおすすめアプリ</p>
+                        <p id="ad-desc" class="text-[8px] text-slate-400 font-medium">今すぐチェックしてみよう</p>
+                    </div>
+                </div>
+                <button id="btn-ad-detail" onclick="showCustomMessage(translations[currentLang].adClickedMsg)" class="px-2.5 py-1 bg-pink-100 hover:bg-pink-200 text-pink-600 font-bold rounded-xl text-[10px] tracking-wider transition">
+                    詳細
+                </button>
+            </div>
+            <p class="text-[9px] text-slate-400 tracking-widest mt-1.5 font-medium">© 2026 お絵描き当てゲーム / Drawing Game</p>
+        </div>
+    </footer>
+
+    <!-- Match-End Video Ad Modal -->
+    <div id="video-ad-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white border border-pink-200 w-full max-w-md rounded-3xl p-6 shadow-2xl pop-animate flex flex-col items-center space-y-4 relative">
+            <div class="w-full flex justify-between items-center">
+                <span id="ad-modal-badge" class="px-2.5 py-1 bg-pink-100 text-pink-600 border border-pink-200 rounded-xl text-[10px] font-bold tracking-wider">ミニ動画広告</span>
+                <span id="ad-countdown" class="text-xs font-mono font-bold text-purple-600 bg-purple-50 px-3 py-1 rounded-full border border-purple-100">残り 5秒</span>
+            </div>
+
+            <div class="w-full aspect-video bg-slate-900 rounded-2xl relative overflow-hidden flex flex-col items-center justify-center border border-pink-100 shadow-inner">
+                <div class="absolute inset-0 bg-gradient-to-b from-purple-900/80 to-slate-900 flex flex-col items-center justify-center p-6 text-center">
+                    <div class="text-2xl mb-2 text-pink-400">✨</div>
+                    <h3 class="text-sm font-bold tracking-widest text-white mb-1" id="ad-match-result-title">マッチ終了・結果発表</h3>
+                    <p class="text-xs text-pink-200 font-medium" id="ad-match-result-desc">スコア集計中...</p>
+                </div>
+                <div class="absolute bottom-0 left-0 right-0 h-1.5 bg-slate-800">
+                    <div id="ad-progress-bar" class="h-full bg-gradient-to-r from-pink-400 to-purple-400 w-0 transition-all duration-1000"></div>
+                </div>
+            </div>
+
+            <div class="text-center space-y-1">
+                <p id="ad-end-msg" class="text-[11px] text-slate-500 font-medium">全5ラウンドお疲れ様でした！</p>
+                <p id="ad-skip-hint" class="text-[11px] font-bold text-pink-500 hidden">✓ 視聴完了！ボタンを押してメニューに戻れるよ！</p>
+            </div>
+
+            <button id="close-ad-btn" onclick="closeMatchVideoAd()" disabled class="w-full py-3 bg-slate-100 text-slate-400 font-bold text-xs tracking-wider rounded-2xl transition border border-slate-200 cursor-not-allowed">
+                結果を見てメニューへ (5秒後)
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let currentLang = 'ja';
+
+        const translations = {
+            ja: {
+                headerTitle: "お絵描き当てギャラリー",
+                menuTitle: "お絵描き当てゲーム",
+                menuDesc: "全5ラウンド！交代でお題を描いて、回答者に当ててもらおう！",
+                menuStartBtn: "2人プレイをはじめる",
+                handoverTitle1: "の番だよ",
+                handoverDesc1: "端末を ",
+                handoverDesc2: " に渡してね。準備ができたら進んでね。",
+                currentTurn: "現在のターン",
+                handoverBtn: "準備完了・お題をえらぶ",
+                promptSelectTitle: "お題をえらぼう",
+                promptSelectSub: " さん、好きな難易度をひとつ選んでね。",
+                easyLabel: "🟢 かんたん",
+                normalLabel: "🟡 ふつう",
+                hardLabel: "🔴 むずかしい",
+                pickBtn: "えらぶ ➔",
+                drawingBadge: "お絵描き中",
+                secretWordLabel: "ひみつのお題",
+                btnClear: "全部消す",
+                btnFinishDrawing: "できた！回答者へ ➔",
+                guessingBadge: "回答タイム",
+                guesserInstruction: "絵を見てお題を当てよう！",
+                guessPlaceholder: "ここに入力してね (例: りんご)",
+                btnSubmitGuess: "回答する",
+                btnSkipGuess: "わからないのでパスする (不正解)",
+                adTitle: "楽しいおすすめアプリ",
+                adDesc: "今すぐチェックしてみよう",
+                adDetail: "詳細",
+                adClickedMsg: "広告がタップされました",
+                adModalBadge: "ミニ動画広告",
+                adMatchResultTitle: "マッチ終了・結果発表",
+                adEndMsg: "全5ラウンドお疲れ様でした！",
+                adSkipHint: "✓ 視聴完了！ボタンを押してメニューに戻れるよ！",
+                adCloseBtn: "結果を見てメニューへ",
+                adCloseBtnAfter: "🏠 メニューにもどる！",
+                correctMsg: "✨ 大正解！すごい！ 🎉",
+                wrongMsg: "💦 ちがうみたい…もう一度入力するかパスしてね",
+                answerWas: "ざんねん！正解は「",
+                answerWasEnd: "」でした！",
+                p1Name: "プレイヤー 1",
+                p2Name: "プレイヤー 2",
+                drawerRole: "お絵描き役",
+                guesserRole: "回答者",
+                tie: "引き分け！",
+                winner1: "勝者: プレイヤー 1 🎉",
+                winner2: "勝者: プレイヤー 2 🎉"
+            },
+            en: {
+                headerTitle: "Drawing Guessing Gallery",
+                menuTitle: "Drawing Guessing Game",
+                menuDesc: "5 Rounds! Take turns drawing and guessing the secret word!",
+                menuStartBtn: "Start 2-Player Game",
+                handoverTitle1: "'s Turn",
+                handoverDesc1: "Hand the device to ",
+                handoverDesc2: ". Press ready when set.",
+                currentTurn: "CURRENT TURN",
+                handoverBtn: "Ready - Choose Word",
+                promptSelectTitle: "Choose a Prompt",
+                promptSelectSub: ", pick your preferred difficulty.",
+                easyLabel: "🟢 Easy",
+                normalLabel: "🟡 Normal",
+                hardLabel: "🔴 Hard",
+                pickBtn: "Select ➔",
+                drawingBadge: "Drawing",
+                secretWordLabel: "SECRET WORD",
+                btnClear: "Clear",
+                btnFinishDrawing: "Done! To Guesser ➔",
+                guessingBadge: "Guessing Time",
+                guesserInstruction: "Look at the drawing and guess!",
+                guessPlaceholder: "Type your guess here (e.g., apple)",
+                btnSubmitGuess: "Submit",
+                btnSkipGuess: "Give up & Skip (Incorrect)",
+                adTitle: "Fun Recommended App",
+                adDesc: "Check it out right now",
+                adDetail: "Details",
+                adClickedMsg: "Ad was clicked!",
+                adModalBadge: "Mini Video Ad",
+                adMatchResultTitle: "Match Ended & Results",
+                adEndMsg: "Great job completing all 5 rounds!",
+                adSkipHint: "✓ Completed! Click to return to menu!",
+                adCloseBtn: "Back to Menu in",
+                adCloseBtnAfter: "🏠 Return to Menu!",
+                correctMsg: "✨ Correct! Amazing! 🎉",
+                wrongMsg: "💦 Not quite... Try again or skip.",
+                answerWas: "Too bad! The word was '",
+                answerWasEnd: "'.",
+                p1Name: "Player 1",
+                p2Name: "Player 2",
+                drawerRole: "Drawer",
+                guesserRole: "Guesser",
+                tie: "It's a Tie!",
+                winner1: "Winner: Player 1 🎉",
+                winner2: "Winner: Player 2 🎉"
+            }
+        };
+
+        let matchState = {
+            round: 1,
+            maxRounds: 5,
+            scores: [0, 0],
+            drawerIndex: 0,
+            promptPool: {
+                ja: {
+                    easy: ['りんご', 'バナナ', 'ネコ', 'イヌ', '太陽', 'おにぎり', '星'],
+                    normal: ['ロボット', 'スイカ', 'ひまわり', 'ペンギン', 'ギター', '富士山', 'お城'],
+                    hard: ['自由の女神', 'ブラックホール', 'DNA', '時差', 'インフレ', 'カメレオン']
+                },
+                en: {
+                    easy: ['Apple', 'Banana', 'Cat', 'Dog', 'Sun', 'Star', 'Fish'],
+                    normal: ['Robot', 'Watermelon', 'Sunflower', 'Penguin', 'Guitar', 'Castle', 'Rocket'],
+                    hard: ['Statue of Liberty', 'Black Hole', 'DNA', 'Time Zone', 'Inflation', 'Chameleon']
+                }
+            },
+            currentWord: '',
+            handoverStep: 0
+        };
+
+        const canvas = document.getElementById('paint-canvas');
+        const ctx = canvas.getContext('2d');
+        const previewImage = document.getElementById('preview-image');
+
+        let isDrawing = false;
+        let brushColor = '#1e293b';
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'ja' ? 'en' : 'ja';
+            updateTexts();
+            updateMatchStatusBanner();
+        }
+
+        function updateTexts() {
+            const t = translations[currentLang];
+            document.getElementById('header-title').innerText = t.headerTitle;
+            document.getElementById('menu-title').innerText = t.menuTitle;
+            document.getElementById('menu-desc').innerText = t.menuDesc;
+            document.getElementById('menu-start-btn').innerText = t.menuStartBtn;
+            document.getElementById('handover-current-turn-label').innerText = t.currentTurn;
+            document.getElementById('handover-btn').innerText = t.handoverBtn;
+            document.getElementById('prompt-select-title').innerText = t.promptSelectTitle;
+            document.getElementById('badge-drawing').innerText = t.drawingBadge;
+            document.getElementById('secret-word-label').innerText = t.secretWordLabel;
+            document.getElementById('btn-clear').innerText = t.btnClear;
+            document.getElementById('btn-finish-drawing').innerText = t.btnFinishDrawing;
+            document.getElementById('badge-guessing').innerText = t.guessingBadge;
+            document.getElementById('guesser-instruction').innerText = t.guesserInstruction;
+            document.getElementById('guess-input').placeholder = t.guessPlaceholder;
+            document.getElementById('btn-submit-guess').innerText = t.btnSubmitGuess;
+            document.getElementById('btn-skip-guess').innerText = t.btnSkipGuess;
+            document.getElementById('ad-title').innerText = t.adTitle;
+            document.getElementById('ad-desc').innerText = t.adDesc;
+            document.getElementById('btn-ad-detail').innerText = t.adDetail;
+            document.getElementById('ad-modal-badge').innerText = t.adModalBadge;
+            document.getElementById('ad-match-result-title').innerText = t.adMatchResultTitle;
+            document.getElementById('ad-end-msg').innerText = t.adEndMsg;
+            document.getElementById('ad-skip-hint').innerText = t.adSkipHint;
+        }
+
+        function initCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            ctx.lineWidth = 5;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = brushColor;
+        }
+
+        window.addEventListener('load', initCanvas);
+        window.addEventListener('resize', initCanvas);
+
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        canvas.addEventListener('mousedown', (e) => startDrawing(getPos(e)));
+        canvas.addEventListener('mousemove', (e) => draw(getPos(e)));
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseleave', stopDrawing);
+
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDrawing(getPos(e)); });
+        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(getPos(e)); });
+        canvas.addEventListener('touchend', stopDrawing);
+
+        function startDrawing(pos) {
+            isDrawing = true;
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+        }
+
+        function draw(pos) {
+            if (!isDrawing) return;
+            ctx.lineTo(pos.x, pos.y);
+            ctx.strokeStyle = brushColor;
+            ctx.stroke();
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+        }
+
+        function setBrushColor(color) {
+            brushColor = color;
+            ctx.strokeStyle = color;
+        }
+
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function startMatch() {
+            matchState.round = 1;
+            matchState.scores = [0, 0];
+            matchState.drawerIndex = 0;
+            
+            document.getElementById('screen-menu').classList.add('hidden');
+            setupRoundHandover();
+        }
+
+        function setupRoundHandover() {
+            const t = translations[currentLang];
+            const p1 = t.p1Name;
+            const p2 = t.p2Name;
+            const drawerName = matchState.drawerIndex === 0 ? p1 : p2;
+            const guesserName = matchState.drawerIndex === 0 ? p2 : p1;
+
+            matchState.handoverStep = 1;
+            document.getElementById('handover-icon').innerText = '🔒';
+            document.getElementById('handover-title').innerText = `${drawerName} ${t.handoverTitle1}`;
+            document.getElementById('handover-desc').innerText = `${t.handoverDesc1}${drawerName}${t.handoverDesc2}`;
+            document.getElementById('handover-role-label').innerText = `${drawerName} (${t.drawerRole}) vs ${guesserName} (${t.guesserRole})`;
+
+            document.getElementById('screen-drawer').classList.add('hidden');
+            document.getElementById('screen-guesser').classList.add('hidden');
+            document.getElementById('screen-prompt-select').classList.add('hidden');
+            document.getElementById('screen-handover').classList.remove('hidden');
+
+            updateMatchStatusBanner();
+        }
+
+        function confirmHandover() {
+            const t = translations[currentLang];
+            const p1 = t.p1Name;
+            const p2 = t.p2Name;
+
+            if (matchState.handoverStep === 1) {
+                document.getElementById('screen-handover').classList.add('hidden');
+                document.getElementById('screen-prompt-select').classList.remove('hidden');
+
+                const drawerName = matchState.drawerIndex === 0 ? p1 : p2;
+                document.getElementById('selector-player-name').innerText = drawerName;
+                document.getElementById('prompt-select-sub').innerText = t.promptSelectSub;
+
+                generatePromptOptions();
+            } else if (matchState.handoverStep === 2) {
+                document.getElementById('screen-handover').classList.add('hidden');
+                document.getElementById('screen-guesser').classList.remove('hidden');
+
+                const guesserName = matchState.drawerIndex === 0 ? p2 : p1;
+                document.getElementById('guesser-player-name').innerText = guesserName;
+                document.getElementById('guess-input').value = '';
+
+                const dataURL = canvas.toDataURL('image/png');
+                previewImage.src = dataURL;
+            }
+        }
+
+        function getRandomItem(arr) {
+            return arr[Math.floor(Math.random() * arr.length)];
+        }
+
+        function generatePromptOptions() {
+            const container = document.getElementById('prompt-options-container');
+            container.innerHTML = '';
+
+            const pool = matchState.promptPool[currentLang];
+            const easyWord = getRandomItem(pool.easy);
+            const normalWord = getRandomItem(pool.normal);
+            const hardWord = getRandomItem(pool.hard);
+
+            const t = translations[currentLang];
+            const options = [
+                { word: easyWord, label: t.easyLabel },
+                { word: normalWord, label: t.normalLabel },
+                { word: hardWord, label: t.hardLabel }
+            ];
+
+            options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = `w-full p-3.5 rounded-2xl border border-pink-100 bg-pink-50/40 hover:bg-pink-100/60 flex justify-between items-center transition text-xs tracking-wider font-bold text-slate-700 shadow-sm`;
+                // 修正：括弧の重なりを解消し「かんたん：太陽」のようにすっきりさせました
+                btn.innerHTML = `
+                    <span>${opt.label}：<span class="text-purple-600">${opt.word}</span></span>
+                    <span class="text-pink-500">${t.pickBtn}</span>
+                `;
+                btn.onclick = () => selectPrompt(opt.word);
+                container.appendChild(btn);
+            });
+        }
+
+        function selectPrompt(word) {
+            matchState.currentWord = word;
+            document.getElementById('screen-prompt-select').classList.add('hidden');
+            document.getElementById('screen-drawer').classList.remove('hidden');
+
+            const t = translations[currentLang];
+            const drawerName = matchState.drawerIndex === 0 ? t.p1Name : t.p2Name;
+            document.getElementById('drawer-player-name').innerText = drawerName;
+            document.getElementById('secret-word-display').innerText = matchState.currentWord;
+            
+            setTimeout(() => {
+                initCanvas();
+                clearCanvas();
+            }, 50);
+        }
+
+        function finishDrawingTurn() {
+            const t = translations[currentLang];
+            const guesserName = matchState.drawerIndex === 0 ? t.p2Name : t.p1Name;
+            matchState.handoverStep = 2;
+
+            document.getElementById('handover-icon').innerText = '🤔';
+            document.getElementById('handover-title').innerText = `${t.handoverDesc1}${guesserName}`;
+            document.getElementById('handover-desc').innerText = `${guesserName} ${t.guesserInstruction}`;
+            document.getElementById('handover-role-label').innerText = `${guesserName} の回答ターン`;
+
+            document.getElementById('screen-drawer').classList.add('hidden');
+            document.getElementById('screen-handover').classList.remove('hidden');
+        }
+
+        function submitGuess() {
+            const val = document.getElementById('guess-input').value.trim().toLowerCase();
+            const target = matchState.currentWord.trim().toLowerCase();
+            if(!val) return;
+
+            const t = translations[currentLang];
+            if(val === target) {
+                showCustomMessage(t.correctMsg);
+                matchState.scores[matchState.drawerIndex === 0 ? 1 : 0] += 1;
+                proceedNextRoundOrMatch();
+            } else {
+                showCustomMessage(t.wrongMsg);
+            }
+        }
+
+        function skipGuess() {
+            const t = translations[currentLang];
+            showCustomMessage(`${t.answerWas}${matchState.currentWord}${t.answerWasEnd}`);
+            proceedNextRoundOrMatch();
+        }
+
+        function proceedNextRoundOrMatch() {
+            document.getElementById('screen-guesser').classList.add('hidden');
+
+            if(matchState.round >= matchState.maxRounds) {
+                triggerMatchEndAd();
+            } else {
+                matchState.round++;
+                matchState.drawerIndex = matchState.drawerIndex === 0 ? 1 : 0;
+                setupRoundHandover();
+            }
+        }
+
+        function updateMatchStatusBanner() {
+            document.getElementById('match-status').innerText = `Round ${matchState.round} / 5 ｜ ${matchState.scores[0]} - ${matchState.scores[1]}`;
+        }
+
+        let adTimer = null;
+        function triggerMatchEndAd() {
+            const modal = document.getElementById('video-ad-modal');
+            const countdownEl = document.getElementById('ad-countdown');
+            const closeBtn = document.getElementById('close-ad-btn');
+            const skipHint = document.getElementById('ad-skip-hint');
+            const progressBar = document.getElementById('ad-progress-bar');
+            const resultTitle = document.getElementById('ad-match-result-title');
+            const resultDesc = document.getElementById('ad-match-result-desc');
+
+            const t = translations[currentLang];
+            let winnerText = t.tie;
+            if(matchState.scores[0] > matchState.scores[1]) winnerText = t.winner1;
+            else if(matchState.scores[1] > matchState.scores[0]) winnerText = t.winner2;
+
+            resultTitle.innerText = winnerText;
+            resultDesc.innerText = `Score — P1: ${matchState.scores[0]} vs P2: ${matchState.scores[1]}`;
+
+            modal.classList.remove('hidden');
+            let timeLeft = 5;
+            countdownEl.innerText = `残り ${timeLeft}s`;
+            closeBtn.disabled = true;
+            closeBtn.classList.remove('bg-gradient-to-r', 'from-pink-400', 'to-purple-400', 'text-white', 'cursor-pointer', 'shadow-md');
+            closeBtn.classList.add('bg-slate-100', 'text-slate-400', 'cursor-not-allowed');
+            closeBtn.innerText = `${t.adCloseBtn} (${timeLeft}s)`;
+            skipHint.classList.add('hidden');
+            progressBar.style.width = '0%';
+
+            setTimeout(() => { progressBar.style.width = '100%'; }, 50);
+
+            adTimer = setInterval(() => {
+                timeLeft--;
+                if(timeLeft > 0) {
+                    countdownEl.innerText = `残り ${timeLeft}s`;
+                    closeBtn.innerText = `${t.adCloseBtn} (${timeLeft}s)`;
+                } else {
+                    clearInterval(adTimer);
+                    countdownEl.innerText = 'OK ✔';
+                    closeBtn.disabled = false;
+                    closeBtn.classList.remove('bg-slate-100', 'text-slate-400', 'cursor-not-allowed');
+                    closeBtn.classList.add('bg-gradient-to-r', 'from-pink-400', 'to-purple-400', 'hover:from-pink-500', 'hover:to-purple-500', 'text-white', 'cursor-pointer', 'shadow-md');
+                    closeBtn.innerText = t.adCloseBtnAfter;
+                    skipHint.classList.remove('hidden');
+                }
+            }, 1000);
+        }
+
+        function closeMatchVideoAd() {
+            document.getElementById('video-ad-modal').classList.add('hidden');
+            document.getElementById('screen-menu').classList.remove('hidden');
+        }
+
+        function showCustomMessage(msg) {
+            let existing = document.getElementById('toast-msg');
+            if(existing) existing.remove();
+
+            const toast = document.createElement('div');
+            toast.id = 'toast-msg';
+            toast.className = 'fixed top-16 left-1/2 transform -translate-x-1/2 bg-white border border-pink-200 text-slate-700 px-4 py-2.5 rounded-2xl shadow-xl z-50 text-xs tracking-wider font-bold flex items-center space-x-2 pop-animate';
+            toast.innerHTML = `<span class="text-pink-500">✨</span><span>${msg}</span>`;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                if(toast) toast.remove();
+            }, 3000);
+        }
+    </script>
+
+</body>
+</html>
